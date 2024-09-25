@@ -3,6 +3,7 @@
 package main
 
 import (
+	logstashexporter "github.com/elastic/opentelemetry-collector-components/exporter/logstashexporter"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/connector"
 	forwardconnector "go.opentelemetry.io/collector/connector/forwardconnector"
@@ -537,6 +538,7 @@ func components() (otelcol.Factories, error) {
 		syslogexporter.NewFactory(),
 		tencentcloudlogserviceexporter.NewFactory(),
 		zipkinexporter.NewFactory(),
+		logstashexporter.NewFactory(),
 	)
 	if err != nil {
 		return otelcol.Factories{}, err
@@ -589,6 +591,7 @@ func components() (otelcol.Factories, error) {
 	factories.ExporterModules[syslogexporter.NewFactory().Type()] = "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/syslogexporter v0.110.0"
 	factories.ExporterModules[tencentcloudlogserviceexporter.NewFactory().Type()] = "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/tencentcloudlogserviceexporter v0.110.0"
 	factories.ExporterModules[zipkinexporter.NewFactory().Type()] = "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/zipkinexporter v0.110.0"
+	factories.ExporterModules[logstashexporter.NewFactory().Type()] = "github.com/elastic/opentelemetry-collector-components/exporter/logstashexporter v0.0.0"
 
 	factories.Processors, err = processor.MakeFactoryMap(
 		batchprocessor.NewFactory(),

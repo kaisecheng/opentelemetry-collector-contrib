@@ -14,83 +14,73 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl"
 )
 
+type murmur3Variant int
+
 const (
-	v32Hash  = "v32_hash"
-	v32Hex   = "v32_hex"
-	v128Hash = "v128_hash" // default
-	v128Hex  = "v128_hex"
+	Murmur3Sum32 murmur3Variant = iota
+	Murmur3Sum128
+	Murmur3Hex32
+	Murmur3Hex128
 )
 
-type MurmurHash3Arguments[K any] struct {
-	Target  ottl.StringGetter[K]
-	Version ottl.Optional[string]
+type Murmur3Arguments[K any] struct {
+	Target ottl.StringGetter[K]
 }
 
-func NewMurmurHash3Factory[K any]() ottl.Factory[K] {
-	return ottl.NewFactory("MurmurHash3", &MurmurHash3Arguments[K]{}, createMurmurHash3Function[K])
+func NewMurmur3HashFactory[K any]() ottl.Factory[K] {
+	return NewMurmur3Factory[K]("Murmur3Hash", Murmur3Sum32)
 }
 
-func createMurmurHash3Function[K any](_ ottl.FunctionContext, oArgs ottl.Arguments) (ottl.ExprFunc[K], error) {
-	args, ok := oArgs.(*MurmurHash3Arguments[K])
+func NewMurmur3Hash128Factory[K any]() ottl.Factory[K] {
+	return NewMurmur3Factory[K]("Murmur3Hash128", Murmur3Sum128)
+}
 
-	if !ok {
-		return nil, fmt.Errorf("MurmurHash3Factory args must be of type *MurmurHash3Arguments[K]")
-	}
+func NewMurmur3HexFactory[K any]() ottl.Factory[K] {
+	return NewMurmur3Factory[K]("Murmur3Hex", Murmur3Hex32)
+}
 
-	version := v128Hash
-	if !args.Version.IsEmpty() {
-		v := args.Version.Get()
+func NewMurmur3Hex128Factory[K any]() ottl.Factory[K] {
+	return NewMurmur3Factory[K]("Murmur3Hex128", Murmur3Hex128)
+}
 
-		switch v {
-		case v32Hash, v32Hex, v128Hash, v128Hex:
-			version = v
-		default:
-			return nil, fmt.Errorf("invalid arguments: %s", v)
+func NewMurmur3Factory[K any](name string, variant murmur3Variant) ottl.Factory[K] {
+	return ottl.NewFactory(name, &Murmur3Arguments[K]{}, func(_ ottl.FunctionContext, oArgs ottl.Arguments) (ottl.ExprFunc[K], error) {
+		args, ok := oArgs.(*Murmur3Arguments[K])
+		if !ok {
+			return nil, fmt.Errorf("%s args must be of type *Murmur3Arguments[K]", name)
 		}
-	}
 
-	return murmurHash3(args.Target, version)
+		return createMurmur3Function[K](args, variant)
+	})
 }
 
-func murmurHash3[K any](target ottl.StringGetter[K], version string) (ottl.ExprFunc[K], error) {
+func createMurmur3Function[K any](args *Murmur3Arguments[K], variant murmur3Variant) (ottl.ExprFunc[K], error) {
 	return func(ctx context.Context, tCtx K) (any, error) {
-		val, err := target.Get(ctx, tCtx)
+		val, err := args.Target.Get(ctx, tCtx)
 		if err != nil {
 			return nil, err
 		}
 
-		switch version {
-		case v32Hash:
+		switch variant {
+		case Murmur3Sum32:
 			h := murmur3.Sum32([]byte(val))
 			return int64(h), nil
-		case v128Hash:
+		case Murmur3Sum128:
 			h1, h2 := murmur3.Sum128([]byte(val))
 			return []int64{int64(h1), int64(h2)}, nil
-		case v32Hex, v128Hex:
-			return hexStringLittleEndianVariant(val, version)
+		case Murmur3Hex32:
+			h := murmur3.Sum32([]byte(val))
+			b := make([]byte, 4)
+			binary.LittleEndian.PutUint32(b, h)
+			return hex.EncodeToString(b), nil
+		case Murmur3Hex128:
+			h1, h2 := murmur3.Sum128([]byte(val))
+			b := make([]byte, 16)
+			binary.LittleEndian.PutUint64(b[:8], h1)
+			binary.LittleEndian.PutUint64(b[8:], h2)
+			return hex.EncodeToString(b), nil
 		default:
-			return nil, fmt.Errorf("invalid argument: %s", version)
+			return nil, fmt.Errorf("unknown murmur3 variant: %d", variant)
 		}
 	}, nil
-}
-
-// hexStringLittleEndianVariant returns the hexadecimal representation of the hash in little-endian format.
-// MurmurHash3, developed by Austin Appleby, is sensitive to endianness. Other languages like Python, Ruby,
-// and Java (using Guava) return a hexadecimal string in the little-endian variant. This function does the same.
-func hexStringLittleEndianVariant(target string, version string) (string, error) {
-	switch version {
-	case v32Hex:
-		h := murmur3.Sum32([]byte(target))
-		b := make([]byte, 4)
-		binary.LittleEndian.PutUint32(b, h)
-		return hex.EncodeToString(b), nil
-	case v128Hex:
-		h1, h2 := murmur3.Sum128([]byte(target))
-		b := make([]byte, 16)
-		binary.LittleEndian.PutUint64(b[:8], h1)
-		binary.LittleEndian.PutUint64(b[8:], h2)
-		return hex.EncodeToString(b), nil
-	default:
-		return "", fmt.Errorf("invalid argument: %s", version)
-	}
 }

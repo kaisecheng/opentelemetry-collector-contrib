@@ -436,7 +436,10 @@ Available Converters:
 - [Minute](#minute)
 - [Minutes](#minutes)
 - [Month](#month)
-- [MurmurHash3](#murmurhash3)
+- [Murmur3Hash](#murmur3hash)
+- [Murmur3Hash128](#murmur3hash128)
+- [Murmur3Hex](#murmur3hex)
+- [Murmur3Hex128](#murmur3hex128)
 - [Nanoseconds](#nanoseconds)
 - [Now](#now)
 - [ParseCSV](#parsecsv)
@@ -948,25 +951,61 @@ Examples:
 
 - `Month(Now())`
 
-### MurmurHash3
+### Murmur3Hash
 
-`MurmurHash3(target, Optional[version])`
+`Murmur3Hash(target)`
 
-The `MurmurHash3` Converter converts the `target` to murmurHash3 hash/digest.
+The `Murmur3Hash` Converter converts the `target` to a Murmur3 32-bit hash represented as a signed integer.
 
-`target` is a Getter that returns a string. The default `version` is `v128_hash`.
+`target` is a Getter that returns a string.
 
-If `version` is
-
-- `v32_hash`: Uses 32-bit version and returns a signed integer hash.
-- `v128_hash`: Use 128-bit version and returns an array of two signed integer hash.
-- `v32_hex`: Uses 32-bit version and returns a hash in hexadecimal string format.
-- `v128_hex`: Uses 128-bit version and returns a hash in hexadecimal string format.
+The returned type is `int64`.
 
 Examples:
 
-- `MurmurHash3(attributes["order.productId"])`
-- `MurmurHash3("sometext", version="v32_hex")`
+- `Murmur3Hash(attributes["order.productId"])`
+
+### Murmur3Hash128
+
+`Murmur3Hash128(target)`
+
+The `Murmur3Hash128` Converter converts the `target` to a Murmur3 128-bit hash represented as two signed integers.
+
+`target` is a Getter that returns a string.
+
+The returned type is a slice of two `int64`.
+
+Examples:
+
+- `Murmur3Hash128(attributes["order.productId"])`
+
+### Murmur3Hex
+
+`Murmur3Hex(target)`
+
+The `Murmur3Hex` Converter converts the `target` to a hexadecimal string representation of the 32-bit Murmur3 hash.
+
+`target` is a Getter that returns a string.
+
+The returned type is `string`.
+
+Examples:
+
+- `Murmur3Hex(attributes["order.productId"])`
+
+### Murmur3Hex128
+
+`Murmur3Hex128(target)`
+
+The `Murmur3Hex128` Converter converts the `target` to a hexadecimal string representation of the 128-bit Murmur3 hash.
+
+`target` is a Getter that returns a string.
+
+The returned type is `string`.
+
+Examples:
+
+- `Murmur3Hex128(attributes["order.productId"])`
 
 ### Nanoseconds
 

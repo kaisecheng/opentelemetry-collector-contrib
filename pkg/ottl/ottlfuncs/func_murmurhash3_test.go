@@ -13,124 +13,120 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl"
 )
 
-func Test_MurmurHash3(t *testing.T) {
+func Test_Murmur3(t *testing.T) {
 	tests := []struct {
-		name        string
-		oArgs       ottl.Arguments
-		expected    any
-		createError string
-		funcError   string
+		name      string
+		oArgs     *Murmur3Arguments[any]
+		variant   murmur3Variant
+		expected  any
+		funcError string
 	}{
 		{
-			name: "string in v32_hash",
-			oArgs: &MurmurHash3Arguments[any]{
+			name: "string in Murmur3Hash",
+			oArgs: &Murmur3Arguments[any]{
 				Target: ottl.StandardStringGetter[any]{
 					Getter: func(_ context.Context, _ any) (any, error) {
 						return "Hello World", nil
 					},
 				},
-				Version: ottl.NewTestingOptional[string]("v32_hash"),
 			},
+			variant:  Murmur3Sum32,
 			expected: int64(427197390),
 		},
 		{
-			name: "string in v128_hash",
-			oArgs: &MurmurHash3Arguments[any]{
+			name: "string in Murmur3Hash128",
+			oArgs: &Murmur3Arguments[any]{
 				Target: ottl.StandardStringGetter[any]{
 					Getter: func(_ context.Context, _ any) (any, error) {
 						return "Hello World", nil
 					},
 				},
 			},
+			variant:  Murmur3Sum128,
 			expected: []int64{int64(1901405986810282715), int64(-8942425033498643417)},
 		},
 		{
 			name: "empty string",
-			oArgs: &MurmurHash3Arguments[any]{
+			oArgs: &Murmur3Arguments[any]{
 				Target: ottl.StandardStringGetter[any]{
 					Getter: func(_ context.Context, _ any) (any, error) {
 						return "", nil
 					},
 				},
-				Version: ottl.NewTestingOptional[string]("v128_hex"),
 			},
+			variant:  Murmur3Hex128,
 			expected: "00000000000000000000000000000000",
 		},
 		{
-			name: "string in v128_hex",
-			oArgs: &MurmurHash3Arguments[any]{
+			name: "string in Murmur3Hex128",
+			oArgs: &Murmur3Arguments[any]{
 				Target: ottl.StandardStringGetter[any]{
 					Getter: func(_ context.Context, _ any) (any, error) {
 						return "Hello World", nil
 					},
 				},
-				Version: ottl.NewTestingOptional[string]("v128_hex"),
 			},
+			variant:  Murmur3Hex128,
 			expected: "dbc2a0c1ab26631a27b4c09fcf1fe683",
 		},
 		{
-			name: "string in v32_hex",
-			oArgs: &MurmurHash3Arguments[any]{
+			name: "string in Murmur3Hex",
+			oArgs: &Murmur3Arguments[any]{
 				Target: ottl.StandardStringGetter[any]{
 					Getter: func(_ context.Context, _ any) (any, error) {
 						return "Hello World", nil
 					},
 				},
-				Version: ottl.NewTestingOptional[string]("v32_hex"),
 			},
+			variant:  Murmur3Hex32,
 			expected: "ce837619",
 		},
 		{
-			name: "invalid version",
-			oArgs: &MurmurHash3Arguments[any]{
+			name: "invalid variant",
+			oArgs: &Murmur3Arguments[any]{
 				Target: ottl.StandardStringGetter[any]{
 					Getter: func(_ context.Context, _ any) (any, error) {
 						return "Hello World", nil
 					},
 				},
-				Version: ottl.NewTestingOptional[string]("66"),
 			},
-			createError: "invalid arguments: 66",
+			variant:   66,
+			funcError: "unknown murmur3 variant: 66",
 		},
 		{
 			name: "non-string",
-			oArgs: &MurmurHash3Arguments[any]{
+			oArgs: &Murmur3Arguments[any]{
 				Target: ottl.StandardStringGetter[any]{
 					Getter: func(_ context.Context, _ any) (any, error) {
 						return 10, nil
 					},
 				},
 			},
+			variant:   Murmur3Sum32,
 			funcError: "expected string but got int",
 		},
 		{
 			name: "nil",
-			oArgs: &MurmurHash3Arguments[any]{
+			oArgs: &Murmur3Arguments[any]{
 				Target: ottl.StandardStringGetter[any]{
 					Getter: func(_ context.Context, _ any) (any, error) {
 						return nil, nil
 					},
 				},
 			},
+			variant:   Murmur3Sum32,
 			funcError: "expected string but got nil",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			exprFunc, err := createMurmurHash3Function[any](ottl.FunctionContext{}, tt.oArgs)
-			if tt.createError != "" {
-				require.ErrorContains(t, err, tt.createError)
-				return
-			}
-
+			exprFunc, err := createMurmur3Function[any](tt.oArgs, tt.variant)
 			assert.NoError(t, err)
-
-			result, err := exprFunc(nil, nil)
+			result, err := exprFunc(context.Background(), nil)
 			if tt.funcError != "" {
 				require.ErrorContains(t, err, tt.funcError)
 				return
 			}
-
 			assert.Equal(t, tt.expected, result)
 		})
 	}

@@ -10,9 +10,13 @@ import (
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/processor"
 	"go.opentelemetry.io/collector/processor/processorhelper"
+	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/dnslookupprocessor/internal/metadata"
 )
+
+// ServerIPKey semconv does not define a Key for server IP. When semconv defines it, this should be removed.
+const ServerIPKey = "server.ip"
 
 var processorCapabilities = consumer.Capabilities{MutatesData: true}
 
@@ -24,7 +28,27 @@ func NewFactory() processor.Factory {
 
 // createDefaultConfig returns a default configuration for the processor.
 func createDefaultConfig() component.Config {
-	return &Config{}
+	return &Config{
+		Resolve: LookupConfig{
+			Enabled:           true,
+			Context:           resource,
+			Attributes:        []string{string(semconv.ServerAddressKey)},
+			ResolvedAttribute: ServerIPKey,
+		},
+		Reverse: LookupConfig{
+			Enabled:           false,
+			Context:           resource,
+			Attributes:        []string{ServerIPKey},
+			ResolvedAttribute: string(semconv.ServerAddressKey),
+		},
+		HitCacheSize:         1000,
+		HitCacheTTL:          60,
+		MissCacheSize:        1000,
+		MissCacheTTL:         30,
+		MaxRetries:           1,
+		Timeout:              0.5,
+		EnableSystemResolver: true,
+	}
 }
 
 func createMetricsProcessor(ctx context.Context, set processor.Settings, cfg component.Config, nextConsumer consumer.Metrics) (processor.Metrics, error) {

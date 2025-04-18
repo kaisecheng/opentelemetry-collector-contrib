@@ -15,8 +15,8 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/dnslookupprocessor/internal/metadata"
 )
 
-// ServerIPKey semconv does not define a Key for server IP. When semconv defines it, this should be removed.
-const ServerIPKey = "server.ip"
+// SourceIPKey semconv does not define a Key for source IP. When semconv defines it, this should be removed.
+const SourceIPKey = "source.ip"
 
 var processorCapabilities = consumer.Capabilities{MutatesData: true}
 
@@ -32,14 +32,14 @@ func createDefaultConfig() component.Config {
 		Resolve: LookupConfig{
 			Enabled:           true,
 			Context:           resource,
-			Attributes:        []string{string(semconv.ServerAddressKey)},
-			ResolvedAttribute: ServerIPKey,
+			Attributes:        []string{string(semconv.SourceAddressKey)},
+			ResolvedAttribute: SourceIPKey,
 		},
 		Reverse: LookupConfig{
 			Enabled:           false,
 			Context:           resource,
-			Attributes:        []string{ServerIPKey},
-			ResolvedAttribute: string(semconv.ServerAddressKey),
+			Attributes:        []string{SourceIPKey},
+			ResolvedAttribute: string(semconv.SourceAddressKey),
 		},
 		HitCacheSize:         1000,
 		HitCacheTTL:          60,
@@ -52,13 +52,28 @@ func createDefaultConfig() component.Config {
 }
 
 func createMetricsProcessor(ctx context.Context, set processor.Settings, cfg component.Config, nextConsumer consumer.Metrics) (processor.Metrics, error) {
-	return processorhelper.NewMetrics(ctx, set, cfg, nextConsumer, newDNSLookupProcessor().processMetrics, processorhelper.WithCapabilities(processorCapabilities))
+	config := cfg.(*Config)
+	dp, err := newDNSLookupProcessor(config, set.Logger)
+	if err != nil {
+		return nil, err
+	}
+	return processorhelper.NewMetrics(ctx, set, cfg, nextConsumer, dp.processMetrics, processorhelper.WithCapabilities(processorCapabilities))
 }
 
 func createTracesProcessor(ctx context.Context, set processor.Settings, cfg component.Config, nextConsumer consumer.Traces) (processor.Traces, error) {
-	return processorhelper.NewTraces(ctx, set, cfg, nextConsumer, newDNSLookupProcessor().processTraces, processorhelper.WithCapabilities(processorCapabilities))
+	config := cfg.(*Config)
+	dp, err := newDNSLookupProcessor(config, set.Logger)
+	if err != nil {
+		return nil, err
+	}
+	return processorhelper.NewTraces(ctx, set, cfg, nextConsumer, dp.processTraces, processorhelper.WithCapabilities(processorCapabilities))
 }
 
 func createLogsProcessor(ctx context.Context, set processor.Settings, cfg component.Config, nextConsumer consumer.Logs) (processor.Logs, error) {
-	return processorhelper.NewLogs(ctx, set, cfg, nextConsumer, newDNSLookupProcessor().processLogs, processorhelper.WithCapabilities(processorCapabilities))
+	config := cfg.(*Config)
+	dp, err := newDNSLookupProcessor(config, set.Logger)
+	if err != nil {
+		return nil, err
+	}
+	return processorhelper.NewLogs(ctx, set, cfg, nextConsumer, dp.processLogs, processorhelper.WithCapabilities(processorCapabilities))
 }

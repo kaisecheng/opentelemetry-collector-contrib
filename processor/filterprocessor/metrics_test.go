@@ -1457,6 +1457,112 @@ func Test_Metrics_NonDefaultFunctions(t *testing.T) {
 	}
 }
 
+func Test_ProcessMetrics_Action(t *testing.T) {
+	tests := []struct {
+		name              string
+		action            condition.Action
+		contextConditions []condition.ContextConditions
+		filterEverything  bool
+		want              func(md pmetric.Metrics)
+	}{
+		{
+			name:   "resource: processor-level action drop",
+			action: condition.ActionDrop,
+			contextConditions: []condition.ContextConditions{
+				{Context: "resource", Conditions: []string{`attributes["host.name"] == "localhost"`}},
+			},
+			filterEverything: true,
+		},
+		{
+			name:   "resource: processor-level action keep",
+			action: condition.ActionKeep,
+			contextConditions: []condition.ContextConditions{
+				{Context: "resource", Conditions: []string{`attributes["host.name"] == "localhost"`}},
+			},
+			want: func(_ pmetric.Metrics) {},
+		},
+		{
+			name:   "scope: processor-level action keep",
+			action: condition.ActionKeep,
+			contextConditions: []condition.ContextConditions{
+				{Context: "scope", Conditions: []string{`name == "scope"`}},
+			},
+			want: func(_ pmetric.Metrics) {},
+		},
+		{
+			name:   "metric: processor-level action keep",
+			action: condition.ActionKeep,
+			contextConditions: []condition.ContextConditions{
+				{Context: "metric", Conditions: []string{`name == "operationA"`}},
+			},
+			want: func(md pmetric.Metrics) {
+				md.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().RemoveIf(func(m pmetric.Metric) bool {
+					return m.Name() != "operationA"
+				})
+			},
+		},
+		{
+			name:   "datapoint: processor-level action keep",
+			action: condition.ActionKeep,
+			contextConditions: []condition.ContextConditions{
+				{Context: "datapoint", Conditions: []string{`attributes["total.string"] == "123456789"`}},
+			},
+			want: func(md pmetric.Metrics) {
+				// Only datapoints of operationA match. All other datapoints and metrics are removed
+				md.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().RemoveIf(func(m pmetric.Metric) bool {
+					return m.Name() != "operationA"
+				})
+			},
+		},
+		{
+			name:   "metric: condition-group action keep overrides processor drop",
+			action: condition.ActionDrop,
+			contextConditions: []condition.ContextConditions{
+				{Context: "metric", Action: condition.ActionKeep, Conditions: []string{`name == "operationA"`}},
+			},
+			want: func(md pmetric.Metrics) {
+				md.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().RemoveIf(func(m pmetric.Metric) bool {
+					return m.Name() != "operationA"
+				})
+			},
+		},
+		{
+			name:   "mixed: multiple condition groups with different actions",
+			action: condition.ActionDrop,
+			contextConditions: []condition.ContextConditions{
+				{Context: "scope", Action: condition.ActionKeep, Conditions: []string{`name == "scope"`}},
+				{Context: "metric", Action: condition.ActionDrop, Conditions: []string{`name == "operationA"`}},
+			},
+			want: func(md pmetric.Metrics) {
+				md.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().RemoveIf(func(m pmetric.Metric) bool {
+					return m.Name() == "operationA"
+				})
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, _ := NewFactory().CreateDefaultConfig().(*Config)
+			cfg.MetricConditions = tt.contextConditions
+			cfg.Action = tt.action
+			processor, err := newFilterMetricProcessor(processortest.NewNopSettings(metadata.Type), cfg)
+			assert.NoError(t, err)
+
+			got, err := processor.processMetrics(t.Context(), constructMetrics())
+
+			if tt.filterEverything {
+				assert.Equal(t, processorhelper.ErrSkipProcessingData, err)
+			} else {
+				assert.NoError(t, err)
+				expected := constructMetrics()
+				tt.want(expected)
+				assert.Equal(t, expected, got)
+			}
+		})
+	}
+}
+
 func constructMetricsWithEmptyDataPoints() pmetric.Metrics {
 	td := pmetric.NewMetrics()
 	rm := td.ResourceMetrics().AppendEmpty()

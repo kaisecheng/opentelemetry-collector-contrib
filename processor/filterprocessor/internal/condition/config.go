@@ -10,6 +10,24 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl"
 )
 
+type Action string
+
+const (
+	ActionDrop Action = "drop"
+	ActionKeep Action = "keep"
+)
+
+func (a *Action) UnmarshalText(text []byte) error {
+	str := Action(strings.ToLower(string(text)))
+	switch str {
+	case ActionDrop, ActionKeep:
+		*a = str
+		return nil
+	default:
+		return fmt.Errorf("unknown action %q, must be %q or %q", str, ActionDrop, ActionKeep)
+	}
+}
+
 var _ ottl.ConditionsGetter = (*ContextConditions)(nil)
 
 type ContextID string
@@ -43,6 +61,8 @@ type ContextConditions struct {
 	// ErrorMode determines how the processor reacts to errors that occur while processing
 	// this group of conditions. When provided, it overrides the default Config ErrorMode.
 	ErrorMode ottl.ErrorMode `mapstructure:"error_mode"`
+	// Action determines what happens when conditions match. Valid values are `drop` and `keep`.
+	Action Action `mapstructure:"action"`
 }
 
 func (c ContextConditions) GetConditions() []string {

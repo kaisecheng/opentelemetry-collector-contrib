@@ -162,6 +162,33 @@ func newTracesConsumer(tc *parsedTraceConditions) TracesConsumer {
 	}
 }
 
+func NewTracesConsumer(base TracesConsumer, opts ...TracesConsumerOption) TracesConsumer {
+	consumer := base
+
+	for _, opt := range opts {
+		consumer = opt(consumer)
+	}
+
+	return consumer
+}
+
+type TracesConsumerOption func(TracesConsumer) TracesConsumer
+
+func WithTracesAction(globalAction Action, contextConditions *ContextConditions) TracesConsumerOption {
+	return func(tc TracesConsumer) TracesConsumer {
+		action := getAction(globalAction, contextConditions)
+
+		if action == ActionKeep {
+			tc.resourceExpr = notExpr(tc.resourceExpr)
+			tc.scopeExpr = notExpr(tc.scopeExpr)
+			tc.spanExpr = notExpr(tc.spanExpr)
+			tc.spanEventExpr = notExpr(tc.spanEventExpr)
+		}
+
+		return tc
+	}
+}
+
 type TraceParserCollection ottl.ParserCollection[parsedTraceConditions]
 
 type TraceParserCollectionOption ottl.ParserCollectionOption[parsedTraceConditions]

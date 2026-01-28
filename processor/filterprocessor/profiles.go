@@ -42,19 +42,25 @@ func newFilterProfilesProcessor(set processor.Settings, cfg *Config) (*filterPro
 	fpp.telemetry = fpt
 
 	if len(cfg.ProfileConditions) > 0 {
-		pc, collectionErr := cfg.newProfileParserCollection(set.TelemetrySettings)
-		if collectionErr != nil {
-			return nil, collectionErr
+		pc, pcErr := cfg.newProfileParserCollection(set.TelemetrySettings)
+		if pcErr != nil {
+			return nil, pcErr
 		}
+		consumers := make([]condition.ProfilesConsumer, 0, len(cfg.ProfileConditions))
 		var errs error
 		for _, cs := range cfg.ProfileConditions {
 			consumer, parseErr := pc.ParseContextConditions(cs)
-			errs = multierr.Append(errs, parseErr)
-			fpp.consumers = append(fpp.consumers, consumer)
+			if parseErr != nil {
+				errs = multierr.Append(errs, parseErr)
+				continue
+			}
+			consumer = condition.NewProfilesConsumer(consumer, condition.WithProfilesAction(cfg.Action, &cs))
+			consumers = append(consumers, consumer)
 		}
 		if errs != nil {
 			return nil, errs
 		}
+		fpp.consumers = consumers
 		return fpp, nil
 	}
 

@@ -6,6 +6,7 @@ package condition // import "github.com/open-telemetry/opentelemetry-collector-c
 import (
 	"go.opentelemetry.io/collector/component"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/filter/expr"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/filter/filterottl"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/contexts/ottlresource"
@@ -63,4 +64,18 @@ func scopeConditionsConverter[R any](builder scopeConditionBuilder[R]) ottl.Pars
 		errorMode := getErrorMode(pc, contextConditions)
 		return builder(parsedConditions, pc.Settings, errorMode), nil
 	}
+}
+
+func getAction(globalAction Action, contextConditions *ContextConditions) Action {
+	if contextConditions != nil && contextConditions.Action != "" {
+		return contextConditions.Action
+	}
+	return globalAction
+}
+
+func notExpr[T any](e expr.BoolExpr[T]) expr.BoolExpr[T] {
+	if e == nil {
+		return nil
+	}
+	return expr.Not(e)
 }

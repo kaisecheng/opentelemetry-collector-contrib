@@ -133,6 +133,32 @@ func newLogsConsumer(lc *parsedLogConditions) LogsConsumer {
 	}
 }
 
+func NewLogsConsumer(base LogsConsumer, opts ...LogsConsumerOption) LogsConsumer {
+	consumer := base
+
+	for _, opt := range opts {
+		consumer = opt(consumer)
+	}
+
+	return consumer
+}
+
+type LogsConsumerOption func(LogsConsumer) LogsConsumer
+
+func WithLogsAction(globalAction Action, contextConditions *ContextConditions) LogsConsumerOption {
+	return func(lc LogsConsumer) LogsConsumer {
+		action := getAction(globalAction, contextConditions)
+
+		if action == ActionKeep {
+			lc.resourceExpr = notExpr(lc.resourceExpr)
+			lc.scopeExpr = notExpr(lc.scopeExpr)
+			lc.logExpr = notExpr(lc.logExpr)
+		}
+
+		return lc
+	}
+}
+
 type LogParserCollection ottl.ParserCollection[parsedLogConditions]
 
 type LogParserCollectionOption ottl.ParserCollectionOption[parsedLogConditions]

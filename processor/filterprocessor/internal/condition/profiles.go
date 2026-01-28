@@ -132,6 +132,32 @@ func newProfilesConsumer(ppc *parsedProfileConditions) ProfilesConsumer {
 	}
 }
 
+func NewProfilesConsumer(base ProfilesConsumer, opts ...ProfilesConsumerOption) ProfilesConsumer {
+	consumer := base
+
+	for _, opt := range opts {
+		consumer = opt(consumer)
+	}
+
+	return consumer
+}
+
+type ProfilesConsumerOption func(ProfilesConsumer) ProfilesConsumer
+
+func WithProfilesAction(globalAction Action, contextConditions *ContextConditions) ProfilesConsumerOption {
+	return func(pc ProfilesConsumer) ProfilesConsumer {
+		action := getAction(globalAction, contextConditions)
+
+		if action == ActionKeep {
+			pc.resourceExpr = notExpr(pc.resourceExpr)
+			pc.scopeExpr = notExpr(pc.scopeExpr)
+			pc.profileExpr = notExpr(pc.profileExpr)
+		}
+
+		return pc
+	}
+}
+
 type ProfileParserCollection ottl.ParserCollection[parsedProfileConditions]
 
 type ProfileParserCollectionOption ottl.ParserCollectionOption[parsedProfileConditions]
@@ -189,11 +215,11 @@ func convertProfileConditions(pc *ottl.ParserCollection[parsedProfileConditions]
 func (ppc *ProfileParserCollection) ParseContextConditions(contextConditions ContextConditions) (ProfilesConsumer, error) {
 	pc := ottl.ParserCollection[parsedProfileConditions](*ppc)
 	if contextConditions.Context != "" {
-		pConditions, err := pc.ParseConditionsWithContext(string(contextConditions.Context), contextConditions, true)
+		profileConditions, err := pc.ParseConditionsWithContext(string(contextConditions.Context), contextConditions, true)
 		if err != nil {
 			return ProfilesConsumer{}, err
 		}
-		return newProfilesConsumer(&pConditions), nil
+		return newProfilesConsumer(&profileConditions), nil
 	}
 
 	var rConditions []*ottl.Condition[*ottlresource.TransformContext]

@@ -253,6 +253,33 @@ func newMetricsConsumer(mc *parsedMetricConditions) MetricsConsumer {
 	}
 }
 
+func NewMetricsConsumer(base MetricsConsumer, opts ...MetricsConsumerOption) MetricsConsumer {
+	consumer := base
+
+	for _, opt := range opts {
+		consumer = opt(consumer)
+	}
+
+	return consumer
+}
+
+type MetricsConsumerOption func(MetricsConsumer) MetricsConsumer
+
+func WithMetricsAction(globalAction Action, contextConditions *ContextConditions) MetricsConsumerOption {
+	return func(mc MetricsConsumer) MetricsConsumer {
+		action := getAction(globalAction, contextConditions)
+
+		if action == ActionKeep {
+			mc.resourceExpr = notExpr(mc.resourceExpr)
+			mc.scopeExpr = notExpr(mc.scopeExpr)
+			mc.metricExpr = notExpr(mc.metricExpr)
+			mc.dataPointExpr = notExpr(mc.dataPointExpr)
+		}
+
+		return mc
+	}
+}
+
 type MetricParserCollection ottl.ParserCollection[parsedMetricConditions]
 
 type MetricParserCollectionOption ottl.ParserCollectionOption[parsedMetricConditions]

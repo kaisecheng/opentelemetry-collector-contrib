@@ -39,6 +39,11 @@ type Config struct {
 	// The default value is `propagate`.
 	ErrorMode ottl.ErrorMode `mapstructure:"error_mode"`
 
+	// Action determines the behavior when a condition matches.
+	// `drop` (default) means the data is dropped when the condition evaluates to true.
+	// `keep` means the data is kept when the condition evaluates to true.
+	Action condition.Action `mapstructure:"action"`
+
 	// Deprecated: use TraceConditions instead.
 	Spans filterconfig.MatchConfig `mapstructure:"spans"`
 	// Deprecated: use MetricConditions instead.

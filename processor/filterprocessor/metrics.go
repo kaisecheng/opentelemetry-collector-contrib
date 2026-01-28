@@ -49,19 +49,25 @@ func newFilterMetricProcessor(set processor.Settings, cfg *Config) (*filterMetri
 	fsp.telemetry = fpt
 
 	if len(cfg.MetricConditions) > 0 {
-		pc, collectionErr := cfg.newMetricParserCollection(set.TelemetrySettings)
-		if collectionErr != nil {
-			return nil, collectionErr
+		pc, pcErr := cfg.newMetricParserCollection(set.TelemetrySettings)
+		if pcErr != nil {
+			return nil, pcErr
 		}
+		consumers := make([]condition.MetricsConsumer, 0, len(cfg.MetricConditions))
 		var errs error
 		for _, cs := range cfg.MetricConditions {
 			consumer, parseErr := pc.ParseContextConditions(cs)
-			errs = multierr.Append(errs, parseErr)
-			fsp.consumers = append(fsp.consumers, consumer)
+			if parseErr != nil {
+				errs = multierr.Append(errs, parseErr)
+				continue
+			}
+			consumer = condition.NewMetricsConsumer(consumer, condition.WithMetricsAction(cfg.Action, &cs))
+			consumers = append(consumers, consumer)
 		}
 		if errs != nil {
 			return nil, errs
 		}
+		fsp.consumers = consumers
 		return fsp, nil
 	}
 

@@ -732,6 +732,110 @@ func Test_Profiles_NonDefaultFunctions(t *testing.T) {
 	}
 }
 
+func Test_ProcessProfiles_Action(t *testing.T) {
+	tests := []struct {
+		name              string
+		action            condition.Action
+		contextConditions []condition.ContextConditions
+		filterEverything  bool
+		want              func(pd pprofile.Profiles)
+	}{
+		{
+			name:   "resource: processor-level action drop",
+			action: condition.ActionDrop,
+			contextConditions: []condition.ContextConditions{
+				{Context: "resource", Conditions: []string{`attributes["host.name"] == "localhost"`}},
+			},
+			filterEverything: true,
+		},
+		{
+			name:   "resource: processor-level action keep",
+			action: condition.ActionKeep,
+			contextConditions: []condition.ContextConditions{
+				{Context: "resource", Conditions: []string{`attributes["host.name"] == "localhost"`}},
+			},
+			want: func(_ pprofile.Profiles) {},
+		},
+		{
+			name:   "scope: processor-level action keep",
+			action: condition.ActionKeep,
+			contextConditions: []condition.ContextConditions{
+				{Context: "scope", Conditions: []string{`name == "scope1"`}},
+			},
+			want: func(pd pprofile.Profiles) {
+				pd.ResourceProfiles().At(0).ScopeProfiles().RemoveIf(func(sp pprofile.ScopeProfiles) bool {
+					return sp.Scope().Name() != "scope1"
+				})
+			},
+		},
+		{
+			name:   "profile: processor-level action keep",
+			action: condition.ActionKeep,
+			contextConditions: []condition.ContextConditions{
+				{Context: "profile", Conditions: []string{`original_payload_format == "legacy"`}},
+			},
+			want: func(pd pprofile.Profiles) {
+				for i := 0; i < pd.ResourceProfiles().At(0).ScopeProfiles().Len(); i++ {
+					pd.ResourceProfiles().At(0).ScopeProfiles().At(i).Profiles().RemoveIf(func(p pprofile.Profile) bool {
+						return p.OriginalPayloadFormat() != "legacy"
+					})
+				}
+			},
+		},
+		{
+			name:   "profile: condition-group action keep overrides processor drop",
+			action: condition.ActionDrop,
+			contextConditions: []condition.ContextConditions{
+				{Context: "profile", Action: condition.ActionKeep, Conditions: []string{`original_payload_format == "legacy"`}},
+			},
+			want: func(pd pprofile.Profiles) {
+				for i := 0; i < pd.ResourceProfiles().At(0).ScopeProfiles().Len(); i++ {
+					pd.ResourceProfiles().At(0).ScopeProfiles().At(i).Profiles().RemoveIf(func(p pprofile.Profile) bool {
+						return p.OriginalPayloadFormat() != "legacy"
+					})
+				}
+			},
+		},
+		{
+			name:   "mixed: multiple condition groups with different actions",
+			action: condition.ActionDrop,
+			contextConditions: []condition.ContextConditions{
+				{Context: "scope", Action: condition.ActionKeep, Conditions: []string{`name == "scope1"`}},
+				{Context: "profile", Action: condition.ActionDrop, Conditions: []string{`original_payload_format == "non-legacy"`}},
+			},
+			want: func(pd pprofile.Profiles) {
+				pd.ResourceProfiles().At(0).ScopeProfiles().RemoveIf(func(sp pprofile.ScopeProfiles) bool {
+					return sp.Scope().Name() != "scope1"
+				})
+				pd.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().RemoveIf(func(p pprofile.Profile) bool {
+					return p.OriginalPayloadFormat() == "non-legacy"
+				})
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, _ := NewFactory().CreateDefaultConfig().(*Config)
+			cfg.ProfileConditions = tt.contextConditions
+			cfg.Action = tt.action
+			processor, err := newFilterProfilesProcessor(processortest.NewNopSettings(metadata.Type), cfg)
+			assert.NoError(t, err)
+
+			got, err := processor.processProfiles(t.Context(), constructProfiles2())
+
+			if tt.filterEverything {
+				assert.Equal(t, processorhelper.ErrSkipProcessingData, err)
+			} else {
+				assert.NoError(t, err)
+				expected := constructProfiles2()
+				tt.want(expected)
+				assert.Equal(t, expected, got)
+			}
+		})
+	}
+}
+
 type ProfileFuncArguments[K any] struct{}
 
 func createProfileFunc[K any](ottl.FunctionContext, ottl.Arguments) (ottl.ExprFunc[K], error) {

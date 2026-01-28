@@ -1355,6 +1355,110 @@ func TestFilterLogProcessorTelemetry(t *testing.T) {
 	}, metricdatatest.IgnoreTimestamp())
 }
 
+func Test_ProcessLogs_Action(t *testing.T) {
+	tests := []struct {
+		name              string
+		action            condition.Action
+		contextConditions []condition.ContextConditions
+		filterEverything  bool
+		want              func(ld plog.Logs)
+	}{
+		{
+			name:   "resource: processor-level action drop",
+			action: condition.ActionDrop,
+			contextConditions: []condition.ContextConditions{
+				{Context: "resource", Conditions: []string{`attributes["host.name"] == "localhost"`}},
+			},
+			filterEverything: true,
+		},
+		{
+			name:   "resource: processor-level action keep",
+			action: condition.ActionKeep,
+			contextConditions: []condition.ContextConditions{
+				{Context: "resource", Conditions: []string{`attributes["host.name"] == "localhost"`}},
+			},
+			want: func(_ plog.Logs) {},
+		},
+		{
+			name:   "scope: processor-level action keep",
+			action: condition.ActionKeep,
+			contextConditions: []condition.ContextConditions{
+				{Context: "scope", Conditions: []string{`name == "scope0"`}},
+			},
+			want: func(ld plog.Logs) {
+				ld.ResourceLogs().At(0).ScopeLogs().RemoveIf(func(sl plog.ScopeLogs) bool {
+					return sl.Scope().Name() != "scope0"
+				})
+			},
+		},
+		{
+			name:   "log: processor-level action keep",
+			action: condition.ActionKeep,
+			contextConditions: []condition.ContextConditions{
+				{Context: "log", Conditions: []string{`body == "operationA"`}},
+			},
+			want: func(ld plog.Logs) {
+				for i := 0; i < ld.ResourceLogs().At(0).ScopeLogs().Len(); i++ {
+					ld.ResourceLogs().At(0).ScopeLogs().At(i).LogRecords().RemoveIf(func(lr plog.LogRecord) bool {
+						return lr.Body().AsString() != "operationA"
+					})
+				}
+			},
+		},
+		{
+			name:   "log: condition-group action keep overrides processor drop",
+			action: condition.ActionDrop,
+			contextConditions: []condition.ContextConditions{
+				{Context: "log", Action: condition.ActionKeep, Conditions: []string{`body == "operationA"`}},
+			},
+			want: func(ld plog.Logs) {
+				for i := 0; i < ld.ResourceLogs().At(0).ScopeLogs().Len(); i++ {
+					ld.ResourceLogs().At(0).ScopeLogs().At(i).LogRecords().RemoveIf(func(lr plog.LogRecord) bool {
+						return lr.Body().AsString() != "operationA"
+					})
+				}
+			},
+		},
+		{
+			name:   "mixed: multiple condition groups with different actions",
+			action: condition.ActionDrop,
+			contextConditions: []condition.ContextConditions{
+				{Context: "scope", Action: condition.ActionKeep, Conditions: []string{`name == "scope0"`}},
+				{Context: "log", Action: condition.ActionDrop, Conditions: []string{`body == "operationB"`}},
+			},
+			want: func(ld plog.Logs) {
+				ld.ResourceLogs().At(0).ScopeLogs().RemoveIf(func(sl plog.ScopeLogs) bool {
+					return sl.Scope().Name() != "scope0"
+				})
+				ld.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().RemoveIf(func(lr plog.LogRecord) bool {
+					return lr.Body().AsString() == "operationB"
+				})
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, _ := NewFactory().CreateDefaultConfig().(*Config)
+			cfg.LogConditions = tt.contextConditions
+			cfg.Action = tt.action
+			processor, err := newFilterLogsProcessor(processortest.NewNopSettings(metadata.Type), cfg)
+			assert.NoError(t, err)
+
+			got, err := processor.processLogs(t.Context(), constructLogs())
+
+			if tt.filterEverything {
+				assert.Equal(t, processorhelper.ErrSkipProcessingData, err)
+			} else {
+				assert.NoError(t, err)
+				expected := constructLogs()
+				tt.want(expected)
+				assert.Equal(t, expected, got)
+			}
+		})
+	}
+}
+
 func constructLogsWithEmptyLogRecords() plog.Logs {
 	td := plog.NewLogs()
 	rs := td.ResourceLogs().AppendEmpty()

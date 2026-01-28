@@ -964,6 +964,126 @@ func Test_NewProcessor_NonDefaultFunctions(t *testing.T) {
 	}
 }
 
+func Test_ProcessTraces_Action(t *testing.T) {
+	tests := []struct {
+		name              string
+		action            condition.Action
+		contextConditions []condition.ContextConditions
+		filterEverything  bool
+		want              func(td ptrace.Traces)
+	}{
+		{
+			name:   "resource: processor-level action drop",
+			action: condition.ActionDrop,
+			contextConditions: []condition.ContextConditions{
+				{Context: "resource", Conditions: []string{`attributes["host.name"] == "localhost"`}},
+			},
+			filterEverything: true,
+		},
+		{
+			name:   "resource: processor-level action keep",
+			action: condition.ActionKeep,
+			contextConditions: []condition.ContextConditions{
+				{Context: "resource", Conditions: []string{`attributes["host.name"] == "localhost"`}},
+			},
+			want: func(_ ptrace.Traces) {},
+		},
+		{
+			name:   "scope: processor-level action keep",
+			action: condition.ActionKeep,
+			contextConditions: []condition.ContextConditions{
+				{Context: "scope", Conditions: []string{`name == "scope1"`}},
+			},
+			want: func(td ptrace.Traces) {
+				td.ResourceSpans().At(0).ScopeSpans().RemoveIf(func(ss ptrace.ScopeSpans) bool {
+					return ss.Scope().Name() != "scope1"
+				})
+			},
+		},
+		{
+			name:   "span: processor-level action keep",
+			action: condition.ActionKeep,
+			contextConditions: []condition.ContextConditions{
+				{Context: "span", Conditions: []string{`name == "operationA"`}},
+			},
+			want: func(td ptrace.Traces) {
+				for i := 0; i < td.ResourceSpans().At(0).ScopeSpans().Len(); i++ {
+					td.ResourceSpans().At(0).ScopeSpans().At(i).Spans().RemoveIf(func(span ptrace.Span) bool {
+						return span.Name() != "operationA"
+					})
+				}
+			},
+		},
+		{
+			name:   "spanevent: processor-level action keep",
+			action: condition.ActionKeep,
+			contextConditions: []condition.ContextConditions{
+				{Context: "spanevent", Conditions: []string{`name == "eventA"`}},
+			},
+			want: func(td ptrace.Traces) {
+				for i := 0; i < td.ResourceSpans().At(0).ScopeSpans().Len(); i++ {
+					for j := 0; j < td.ResourceSpans().At(0).ScopeSpans().At(i).Spans().Len(); j++ {
+						td.ResourceSpans().At(0).ScopeSpans().At(i).Spans().At(j).Events().RemoveIf(func(event ptrace.SpanEvent) bool {
+							return event.Name() != "eventA"
+						})
+					}
+				}
+			},
+		},
+		{
+			name:   "span: condition-group action keep overrides processor drop",
+			action: condition.ActionDrop,
+			contextConditions: []condition.ContextConditions{
+				{Context: "span", Action: condition.ActionKeep, Conditions: []string{`name == "operationA"`}},
+			},
+			want: func(td ptrace.Traces) {
+				for i := 0; i < td.ResourceSpans().At(0).ScopeSpans().Len(); i++ {
+					td.ResourceSpans().At(0).ScopeSpans().At(i).Spans().RemoveIf(func(span ptrace.Span) bool {
+						return span.Name() != "operationA"
+					})
+				}
+			},
+		},
+		{
+			name:   "mixed: multiple condition groups with different actions",
+			action: condition.ActionDrop,
+			contextConditions: []condition.ContextConditions{
+				{Context: "scope", Action: condition.ActionKeep, Conditions: []string{`name == "scope1"`}},
+				{Context: "span", Action: condition.ActionDrop, Conditions: []string{`name == "operationB"`}},
+			},
+			want: func(td ptrace.Traces) {
+				td.ResourceSpans().At(0).ScopeSpans().RemoveIf(func(ss ptrace.ScopeSpans) bool {
+					return ss.Scope().Name() != "scope1"
+				})
+				td.ResourceSpans().At(0).ScopeSpans().At(0).Spans().RemoveIf(func(span ptrace.Span) bool {
+					return span.Name() == "operationB"
+				})
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, _ := NewFactory().CreateDefaultConfig().(*Config)
+			cfg.TraceConditions = tt.contextConditions
+			cfg.Action = tt.action
+			processor, err := newFilterSpansProcessor(processortest.NewNopSettings(metadata.Type), cfg)
+			assert.NoError(t, err)
+
+			got, err := processor.processTraces(t.Context(), constructTraces())
+
+			if tt.filterEverything {
+				assert.Equal(t, processorhelper.ErrSkipProcessingData, err)
+			} else {
+				assert.NoError(t, err)
+				expected := constructTraces()
+				tt.want(expected)
+				assert.Equal(t, expected, got)
+			}
+		})
+	}
+}
+
 func contructTracesWithEmptySpanEvent() ptrace.Traces {
 	td := ptrace.NewTraces()
 	rs := td.ResourceSpans().AppendEmpty()

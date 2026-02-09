@@ -7,8 +7,27 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/filter/expr"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl"
 )
+
+type Action string
+
+const (
+	ActionDrop Action = "drop"
+	ActionKeep Action = "keep"
+)
+
+func (a *Action) UnmarshalText(text []byte) error {
+	str := Action(strings.ToLower(string(text)))
+	switch str {
+	case ActionDrop, ActionKeep:
+		*a = str
+		return nil
+	default:
+		return fmt.Errorf("unknown action %q, must be %q or %q", str, ActionDrop, ActionKeep)
+	}
+}
 
 var _ ottl.ConditionsGetter = (*ContextConditions)(nil)
 
@@ -38,6 +57,8 @@ func (c *ContextID) UnmarshalText(text []byte) error {
 
 // ContextConditions is a wrapper struct for OTTL conditions.
 type ContextConditions struct {
+	// Action determines what happens when conditions match. Valid values are `drop` and `keep`.
+	Action     Action    `mapstructure:"action"`
 	Context    ContextID `mapstructure:"context"`
 	Conditions []string  `mapstructure:"conditions"`
 	// ErrorMode determines how the processor reacts to errors that occur while processing
@@ -63,4 +84,18 @@ func getErrorMode[T any](pc *ottl.ParserCollection[T], contextConditions *Contex
 		errorMode = contextConditions.ErrorMode
 	}
 	return errorMode
+}
+
+func getAction(procAction Action, contextConditions *ContextConditions) Action {
+	if contextConditions.Action != "" {
+		return contextConditions.Action
+	}
+	return procAction
+}
+
+func notExpr[T any](boolExpr expr.BoolExpr[T]) expr.BoolExpr[T] {
+	if boolExpr == nil {
+		return nil
+	}
+	return expr.Not(boolExpr)
 }

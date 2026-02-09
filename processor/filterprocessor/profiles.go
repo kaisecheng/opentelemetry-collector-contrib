@@ -48,7 +48,7 @@ func newFilterProfilesProcessor(set processor.Settings, cfg *Config) (*filterPro
 		}
 		var errs error
 		for _, cs := range cfg.ProfileConditions {
-			consumer, parseErr := pc.ParseContextConditions(cs)
+			consumer, parseErr := pc.ParseContextConditions(cs, cfg.Action)
 			errs = multierr.Append(errs, parseErr)
 			fpp.consumers = append(fpp.consumers, consumer)
 		}

@@ -55,7 +55,7 @@ func newFilterMetricProcessor(set processor.Settings, cfg *Config) (*filterMetri
 		}
 		var errs error
 		for _, cs := range cfg.MetricConditions {
-			consumer, parseErr := pc.ParseContextConditions(cs)
+			consumer, parseErr := pc.ParseContextConditions(cs, cfg.Action)
 			errs = multierr.Append(errs, parseErr)
 			fsp.consumers = append(fsp.consumers, consumer)
 		}

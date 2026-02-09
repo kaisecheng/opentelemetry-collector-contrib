@@ -34,6 +34,7 @@ type parsedMetricConditions struct {
 	dataPointConditions []*ottl.Condition[*ottldatapoint.TransformContext]
 	telemetrySettings   component.TelemetrySettings
 	errorMode           ottl.ErrorMode
+	action              Action
 }
 
 func (mc MetricsConsumer) ConsumeMetrics(ctx context.Context, md pmetric.Metrics) error {
@@ -245,6 +246,13 @@ func newMetricsConsumer(mc *parsedMetricConditions) MetricsConsumer {
 		dExpr = &cs
 	}
 
+	if mc.action == ActionKeep {
+		rExpr = notExpr(rExpr)
+		sExpr = notExpr(sExpr)
+		mExpr = notExpr(mExpr)
+		dExpr = notExpr(dExpr)
+	}
+
 	return MetricsConsumer{
 		resourceExpr:  rExpr,
 		scopeExpr:     sExpr,
@@ -331,13 +339,14 @@ func convertDataPointConditions(pc *ottl.ParserCollection[parsedMetricConditions
 	}, nil
 }
 
-func (mpc *MetricParserCollection) ParseContextConditions(contextConditions ContextConditions) (MetricsConsumer, error) {
+func (mpc *MetricParserCollection) ParseContextConditions(contextConditions ContextConditions, procAction Action) (MetricsConsumer, error) {
 	pc := ottl.ParserCollection[parsedMetricConditions](*mpc)
 	if contextConditions.Context != "" {
 		mc, err := pc.ParseConditionsWithContext(string(contextConditions.Context), contextConditions, true)
 		if err != nil {
 			return MetricsConsumer{}, err
 		}
+		mc.action = getAction(procAction, &contextConditions)
 		return newMetricsConsumer(&mc), nil
 	}
 
@@ -373,6 +382,7 @@ func (mpc *MetricParserCollection) ParseContextConditions(contextConditions Cont
 		dataPointConditions: dConditions,
 		telemetrySettings:   pc.Settings,
 		errorMode:           getErrorMode[parsedMetricConditions](&pc, &contextConditions),
+		action:              getAction(procAction, &contextConditions),
 	}
 
 	return newMetricsConsumer(&aggregatedConditions), nil

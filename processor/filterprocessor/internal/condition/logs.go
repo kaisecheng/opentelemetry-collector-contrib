@@ -31,6 +31,7 @@ type parsedLogConditions struct {
 	logConditions      []*ottl.Condition[*ottllog.TransformContext]
 	telemetrySettings  component.TelemetrySettings
 	errorMode          ottl.ErrorMode
+	action             Action
 }
 
 func (lc LogsConsumer) ConsumeLogs(ctx context.Context, ld plog.Logs) error {
@@ -126,6 +127,12 @@ func newLogsConsumer(lc *parsedLogConditions) LogsConsumer {
 		lExpr = &cs
 	}
 
+	if lc.action == ActionKeep {
+		rExpr = notExpr(rExpr)
+		sExpr = notExpr(sExpr)
+		lExpr = notExpr(lExpr)
+	}
+
 	return LogsConsumer{
 		resourceExpr: rExpr,
 		scopeExpr:    sExpr,
@@ -191,7 +198,7 @@ func convertLogConditions(pc *ottl.ParserCollection[parsedLogConditions], condit
 // For undefined context, each condition is parsed independently.
 // Conditions are then grouped by their inferred context (resource, scope, log).
 // The conditions group's error mode takes precedence over the processor-level error mode.
-func (lpc *LogParserCollection) ParseContextConditions(contextConditions ContextConditions) (LogsConsumer, error) {
+func (lpc *LogParserCollection) ParseContextConditions(contextConditions ContextConditions, procAction Action) (LogsConsumer, error) {
 	pc := ottl.ParserCollection[parsedLogConditions](*lpc)
 
 	if contextConditions.Context != "" {
@@ -199,6 +206,7 @@ func (lpc *LogParserCollection) ParseContextConditions(contextConditions Context
 		if err != nil {
 			return LogsConsumer{}, err
 		}
+		lc.action = getAction(procAction, &contextConditions)
 		return newLogsConsumer(&lc), nil
 	}
 
@@ -229,6 +237,7 @@ func (lpc *LogParserCollection) ParseContextConditions(contextConditions Context
 		logConditions:      lConditions,
 		telemetrySettings:  pc.Settings,
 		errorMode:          getErrorMode[parsedLogConditions](&pc, &contextConditions),
+		action:             getAction(procAction, &contextConditions),
 	}
 
 	return newLogsConsumer(&aggregatedConditions), nil

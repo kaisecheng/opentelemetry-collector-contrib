@@ -32,6 +32,11 @@ import (
 
 // Config defines configuration for Resource processor.
 type Config struct {
+	// Action determines the behavior when a condition matches.
+	// `drop` (default) discards data that matches the condition.
+	// `keep` retains only data that matches the condition and discards the rest.
+	Action condition.Action `mapstructure:"action"`
+
 	// ErrorMode determines how the processor reacts to errors that occur while processing an OTTL condition.
 	// Valid values are `ignore` and `propagate`.
 	// `ignore` means the processor ignores errors returned by conditions and continues on to the next condition. This is the recommended mode.
@@ -518,7 +523,7 @@ func (cfg *Config) validateInferredContextConfig() error {
 			return err
 		}
 		for _, cs := range cfg.TraceConditions {
-			_, err = pc.ParseContextConditions(cs)
+			_, err = pc.ParseContextConditions(cs, cfg.Action)
 			if err != nil {
 				errs = multierr.Append(errs, err)
 			}
@@ -531,7 +536,7 @@ func (cfg *Config) validateInferredContextConfig() error {
 			return err
 		}
 		for _, cs := range cfg.MetricConditions {
-			_, err = pc.ParseContextConditions(cs)
+			_, err = pc.ParseContextConditions(cs, cfg.Action)
 			if err != nil {
 				errs = multierr.Append(errs, err)
 			}
@@ -544,7 +549,7 @@ func (cfg *Config) validateInferredContextConfig() error {
 			return err
 		}
 		for _, cs := range cfg.LogConditions {
-			_, err = pc.ParseContextConditions(cs)
+			_, err = pc.ParseContextConditions(cs, cfg.Action)
 			if err != nil {
 				errs = multierr.Append(errs, err)
 			}
@@ -557,7 +562,7 @@ func (cfg *Config) validateInferredContextConfig() error {
 			return err
 		}
 		for _, cs := range cfg.ProfileConditions {
-			_, err = pc.ParseContextConditions(cs)
+			_, err = pc.ParseContextConditions(cs, cfg.Action)
 			if err != nil {
 				errs = multierr.Append(errs, err)
 			}

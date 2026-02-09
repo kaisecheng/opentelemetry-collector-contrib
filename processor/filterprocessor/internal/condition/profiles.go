@@ -31,6 +31,7 @@ type parsedProfileConditions struct {
 	profileConditions  []*ottl.Condition[*ottlprofile.TransformContext]
 	telemetrySettings  component.TelemetrySettings
 	errorMode          ottl.ErrorMode
+	action             Action
 }
 
 func (pc ProfilesConsumer) ConsumeProfiles(ctx context.Context, pd pprofile.Profiles) error {
@@ -126,6 +127,12 @@ func newProfilesConsumer(ppc *parsedProfileConditions) ProfilesConsumer {
 		pExpr = &cs
 	}
 
+	if ppc.action == ActionKeep {
+		rExpr = notExpr(rExpr)
+		sExpr = notExpr(sExpr)
+		pExpr = notExpr(pExpr)
+	}
+
 	return ProfilesConsumer{
 		resourceExpr: rExpr,
 		scopeExpr:    sExpr,
@@ -187,13 +194,14 @@ func convertProfileConditions(pc *ottl.ParserCollection[parsedProfileConditions]
 	}, nil
 }
 
-func (ppc *ProfileParserCollection) ParseContextConditions(contextConditions ContextConditions) (ProfilesConsumer, error) {
+func (ppc *ProfileParserCollection) ParseContextConditions(contextConditions ContextConditions, procAction Action) (ProfilesConsumer, error) {
 	pc := ottl.ParserCollection[parsedProfileConditions](*ppc)
 	if contextConditions.Context != "" {
 		pConditions, err := pc.ParseConditionsWithContext(string(contextConditions.Context), contextConditions, true)
 		if err != nil {
 			return ProfilesConsumer{}, err
 		}
+		pConditions.action = getAction(procAction, &contextConditions)
 		return newProfilesConsumer(&pConditions), nil
 	}
 
@@ -224,6 +232,7 @@ func (ppc *ProfileParserCollection) ParseContextConditions(contextConditions Con
 		profileConditions:  pConditions,
 		telemetrySettings:  pc.Settings,
 		errorMode:          getErrorMode[parsedProfileConditions](&pc, &contextConditions),
+		action:             getAction(procAction, &contextConditions),
 	}
 
 	return newProfilesConsumer(&aggregatedConditions), nil
